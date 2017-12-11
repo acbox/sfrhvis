@@ -44,7 +44,14 @@ var getVisItems = function(data) {
       instanceId: x.EventInformation.InstanceId,
       timestamp: x.Timestamp
     }
-  }); //.slice(0);
+  });
+
+  // strip out termination_notified and any other event type
+  for (var k = 0; k < historyRecords.length; k++) {
+    if (!(historyRecords[k].eventSubType.match(/^(?:launched|stopped|terminated)$/))) {
+      historyRecords.splice(k, 1);
+    }
+  }
 
   while (historyRecords.length > 0) {
     var recordB = {};
