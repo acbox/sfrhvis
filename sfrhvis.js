@@ -14,20 +14,20 @@ var historyStart;
 var instanceIdGroupMappings = {};
 
 var setupInstanceIdGroupMappings = function(data) {
-  unique_ids = _.uniq(_.map(data.HistoryRecords, function(x) {
+  var unique_instance_ids = _.uniq(_.map(data.HistoryRecords, function(x) {
     return x.EventInformation.InstanceId
   }));
   var i = 0;
-  _.each(unique_ids, function(id) {
-    instanceIdGroupMappings[id] = i;
+  _.each(unique_instance_ids, function(instance_id) {
+    instanceIdGroupMappings[instance_id] = i;
     i += 1;
   });
 };
 
-var getVisGroups = function(data) {
-  return _.map(instanceIdGroupMappings, function (id, instance_id) {
+var getVisGroups = function() {
+  return _.map(instanceIdGroupMappings, function (group_id, instance_id) {
     return {
-      id: id,
+      id: group_id,
       content: instance_id,
     };
   });
