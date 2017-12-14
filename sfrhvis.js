@@ -17,11 +17,10 @@ var setupInstanceIdGroupMappings = function(data) {
   var unique_instance_ids = _.uniq(_.map(data.HistoryRecords, function(x) {
     return x.EventInformation.InstanceId
   }));
-  var i = 0;
-  _.each(unique_instance_ids, function(instance_id) {
-    instanceIdGroupMappings[instance_id] = i;
-    i += 1;
-  });
+  instanceIdGroupMappings = _.reduce(unique_instance_ids, function(hash, instance_id, i) {
+    hash[instance_id] = i
+    return hash
+  }, {});
 };
 
 var getVisGroups = function() {
