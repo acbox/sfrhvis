@@ -13,6 +13,13 @@ var historyStart;
 
 var instanceIdGroupMappings = {};
 
+var filterDataEvents = function(data) {
+  data.HistoryRecords = data.HistoryRecords.filter(function(record) {
+    return record.EventInformation.EventSubType.match(/^(?:launched|stopped|terminated)$/)
+  });
+  return data;
+};
+
 var setupInstanceIdGroupMappings = function(data) {
   var unique_instance_ids = _.uniq(_.map(data.HistoryRecords, function(x) {
     return x.EventInformation.InstanceId
@@ -45,13 +52,6 @@ var getVisItems = function(data) {
     }
   });
 
-  // strip out termination_notified and any other event type
-  for (var k = 0; k < historyRecords.length; k++) {
-    if (!(historyRecords[k].eventSubType.match(/^(?:launched|stopped|terminated)$/))) {
-      historyRecords.splice(k, 1);
-    }
-  }
-
   while (historyRecords.length > 0) {
     var recordB = {};
     var startDate = {};
@@ -79,23 +79,46 @@ var getVisItems = function(data) {
       }
       endDate = _.isEmpty(recordB) ? historyEnd : new Date(recordB.timestamp);
     } else {
-      // recordA is a stopped/terminated event, set start to beginning of period
+      // recordA is a stopped/terminated event with no corresponding launch event, set start to beginning of period
       className = (recordA.eventSubType === "stopped") ? 'stopped' : 'terminated';
       startDate = historyStart;
       endDate = new Date(recordA.timestamp);
     }
 
-    console.log('Creating item start/end item with the following properties:');
+    if (recordA.eventSubType == recordB.eventSubType) {
+      console.log('WARNING ec2.describeSpotFleetRequestHistory() returned two consecutive events of the same type for the same EC2 instance, one will be stripped:');
+      console.log(recordA);
+      console.log(recordB);
+      if (recordA.eventSubType == "terminated") {
+        recordB = {};
+        className = "terminated"
+      } else {
+        recordA = {};
+        className = (recordB.eventSubType === "stopped") ? 'stopped' : 'launched';
+        if (recordB.eventSubType == 'launched') {
+          endDate = historyEnd;
+          startDate = recordB.timestamp;
+          className = "running"
+        } else {
+          startDate = historyStart;
+          className = "stopped"
+        }
+      }
+    }
+
+    console.log('Creating start/end item with the following properties:');
     console.log(recordA);
     console.log(recordB);
-
-    items.push({
+    item = {
       id: itemId,
-      group: instanceIdGroupMappings[recordA.instanceId],
-      start: startDate.toString(),
-      end: endDate.toString(),
+      group: instanceIdGroupMappings[(_.isEmpty(recordA) ? recordB.instanceId : recordA.instanceId)],
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
       className: className,
-    });
+    }
+    console.log(item);
+
+    items.push(item);
     
     itemId += 1;
   }
@@ -108,21 +131,18 @@ app.get('/', function(req, res) {
 
     var region = req.query.region || config.region
     var requestId = req.query.requestId || config.requestId;
-    var startTimeOffset = req.query.startTimeOffset || config.startTimeOffset;
 
     AWS.config.update({region: region});
 
-    historyEnd = new Date();
-    historyStart = new Date(historyEnd);
-    var startTimeString = historyStart.toString();
+    historyStart = new Date();
+    historyStart.setDate(historyStart.getDate());
+    historyStart.setHours(0,0,0,0);
 
-    //if ('startTime' in req.query && typeof req.query.startTime !== 'undefined') {
-    if (typeof startTimeOffset !== undefined) {
-      historyStart.setMinutes(historyEnd.getMinutes() - 60 * startTimeOffset);
-      startTimeString = historyStart.toString() + ' (' + startTimeOffset + ' hours ago)';
-    } else {
-      historyStart.setHours(0,0,0,0);
-    }
+    historyEnd = new Date();
+    historyEnd.setDate(historyStart.getDate());
+    historyEnd.setHours(23,59,59,999);
+
+    var startTimeString = historyStart.toString();
 
     var params = {
       SpotFleetRequestId: requestId,
@@ -142,17 +162,19 @@ app.get('/', function(req, res) {
       }
       else {
         console.log('Successful AWS SDK response:');
-        console.log(data);
+        console.log(JSON.stringify(data, null, 2));
+
+        data = filterDataEvents(data);
 
         setupInstanceIdGroupMappings(data);
         
         var groups = getVisGroups(data);
         console.log('Extracted instance IDs as vis.js groups:');
-        console.log(JSON.stringify(groups));
+        console.log(JSON.stringify(groups, null, 2));
         
         var items = getVisItems(data);
         console.log('Extracted the following instanceChange events as vis.js items:');
-        console.log(JSON.stringify(items));
+        console.log(JSON.stringify(items, null, 2));
 
         var changeEvents = items.length;
 

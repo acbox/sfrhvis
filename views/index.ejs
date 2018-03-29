@@ -45,7 +45,8 @@
     <script>
       var groups = new vis.DataSet(<%- JSON.stringify(groups) %>);
     
-      var items = new vis.DataSet(<%- JSON.stringify(items) %>);
+      var items = new vis.DataSet({ type: { start: 'ISODate', end: 'ISODate' } });
+      items.add(<%- JSON.stringify(items) %>);
     
       var container = document.getElementById('visualization');
       var options = {
